@@ -1,0 +1,77 @@
+version: "3"
+
+services:
+  # traefik:
+  #   image: traefik:3.2
+
+  db:
+    image: mysql:${MYSQL_VERSION}
+    restart: always
+    command: [ "mysqld", "--character-set-server=utf8mb4", "--collation-server=utf8mb4_unicode_ci" ]
+    cap_add:
+      - SYS_NICE
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+      MYSQL_USER: ${MYSQL_USER}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD}
+      MYSQL_DATABASE: ${MYSQL_DATABASE}
+    ports:
+      - '${MYSQL_PORT}:3306'
+    volumes:
+      - ./data/mysql:/var/lib/mysql
+    networks:
+      - database
+
+  phpmyadmin:
+    image: phpmyadmin/phpmyadmin
+    restart: always
+    ports:
+      - 8080:80
+    environment:
+      PMA_HOST: db
+      PMA_USER: root
+      PMA_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+    volumes:
+      - ./data/phpmyadmin:/tmp/sessions
+    depends_on:
+      - db
+    networks:
+      - database
+
+  mongo:
+    image: mongo
+    restart: always
+    environment:
+      # - MONGO_INITDB_ROOT_USERNAME=${MONGO_ROOT_USER}
+      # - MONGO_INITDB_ROOT_PASSWORD=${MONGO_ROOT_PASSWORD}
+      - MONGO_INITDB_DATABASE=${MONGO_DATABASE}
+    networks:
+      - database
+    ports:
+      - ${MONGO_PORT:-27017}:27017
+    volumes:
+      - ./data/mongo:/data/db
+
+  redis:
+    image: redis:7.4.1-alpine
+    restart: always
+    command: redis-server --save 20 1 --loglevel warning
+    ports:
+      - ${REDIS_PORT:-6379}:6379
+    volumes:
+      - ./data/redis:/data
+    networks:
+      - database
+
+  redis-insight:
+    image: redis/redisinsight:latest
+    restart: always
+    # volumes:
+    ports:
+      - 5540:5540
+    networks:
+      - database
+
+networks:
+  database:
+    driver: bridge
