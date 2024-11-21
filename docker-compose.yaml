@@ -1,8 +1,63 @@
 version: "3"
+name: 'max'
 
 services:
-  # traefik:
-  #   image: traefik:3.2
+  traefik:
+    image: traefik:2.11
+    command: 
+      - "--api.insecure=true"
+      - "--providers.docker=true"
+      - "--providers.docker.exposedbydefault=false"
+      - "--providers.docker.endpoint=tcp://host.docker.internal:2375"  # Sử dụng TCP endpoint
+      - "--entrypoints.web.address=:80"
+      # - "--entryPoints.websecure.address=:443"
+      # - "--certificatesresolvers.kuon-certificate.acme.tlschallenge=true"
+      # - "--certificatesresolvers.kuon-certificate.acme.httpchallenge=true"
+      # - "--certificatesresolvers.kuon-certificate.acme.httpchallenge.entrypoint=web"
+      # - "--certificatesresolvers.kuon-certificate.acme.email=kuon@playground.com"
+      # - "--certificatesresolvers.kuon-certificate.acme.storage=/certificate/acme.json"
+      # - "--providers.file.filename=/etc/traefik/dynamic.yml"  # cấu hình động TLS
+    ports:
+      - 80:80                   # Cổng cho HTTP
+      # - 443:443
+      # - "8080:8080"
+    restart: always
+    volumes:
+      # - /var/run/docker.sock:/var/run/docker.sock
+      - "./data/traefix/certificate:/certificate"
+      - "./data/traefix/config/dynamic.yml:/etc/traefik/dynamic.yml"
+    networks:
+      - database
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.dashboard.rule=Host(`traefik.dashboard.local`)"
+      # - "traefik.http.routers.dashboard.entrypoints=websecure"
+      - "traefik.http.services.dashboard.loadbalancer.server.port=8080"
+      # - "traefik.http.routers.dashboard.tls.certresolver=kuon-certificate"
+      # - "traefik.http.routers.dashboard.tls=true"
+
+  # ad-server:
+  #   container_name: ad-server
+  #   image: ad-server:1
+  #   restart: always
+  #   build: 
+  #     context: ./
+  #     dockerfile: ./devlopment/app/ad-server/Dockerfile
+  #     target: dev
+  #   volumes:
+  #     - ../maxAdServer:/app
+  #     - /app/node_modules
+  #   env_file:
+  #     - docker.env
+  #   labels:
+  #     - "traefik.enable=true"
+  #     - "traefik.http.routers.ad-server.rule=Host(`ad-server.local`)"
+  #   networks:
+  #     - database
+  #   ports:
+  #     - 4000:3000
+  #   command: npx nest start --watch
+
 
   db:
     image: mysql:${MYSQL_VERSION}
@@ -22,29 +77,56 @@ services:
     networks:
       - database
 
+  phpmyadmin-nginx:
+    image: nginx:1.27.2-alpine
+    restart: always
+    # ports:
+    # - 80:80
+    volumes:
+      - ./app/phpmyadmin/nginx.conf:/etc/nginx/nginx.conf
+    networks:
+      - database
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.phpmyadmin.rule=Host(`traefik.phpmyadmin.local`)"
+      - "traefik.http.services.phpmyadmin.loadbalancer.server.port=80"
+      # - "traefik.http.middlewares.service2-strip-prefix.stripPrefix.prefixes=/phpmyadmin"
+      # - "traefik.http.routers.service2.middlewares=service2-strip-prefix"
+      # - "traefik.http.routers.phpmyadmin.tls=true"
+      # - "traefik.http.routers.phpmyadmin.tls.certresolver=kuon-certificate"
+      
+
   phpmyadmin:
     image: phpmyadmin/phpmyadmin
     restart: always
-    ports:
-      - 8080:80
+    # ports:
+    #   - 8080:80
     environment:
       PMA_HOST: db
       PMA_USER: root
       PMA_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+      UPLOAD_LIMIT: 100000000
     volumes:
       - ./data/phpmyadmin:/tmp/sessions
     depends_on:
       - db
     networks:
       - database
+    # labels:
+    #   - "traefik.enable=true"
+    #   - "traefik.http.routers.phpmyadmin.rule=Host(`traefik.phpmyadmin.local`) && PathPrefix(`/phpmyadmin`)"
+    #   - "traefik.http.services.phpmyadmin.loadbalancer.server.port=80"
+    #   - "traefik.http.middlewares.service2-strip-prefix.stripPrefix.prefixes=/phpmyadmin"
+    #   - "traefik.http.routers.service2.middlewares=service2-strip-prefix"
+      # - "traefik.http.routers.phpmyadmin.tls=true"
+      # - "traefik.http.routers.phpmyadmin.tls.certresolver=kuon-certificate"
+      
 
   mongo:
     image: mongo
     restart: always
     environment:
-      # - MONGO_INITDB_ROOT_USERNAME=${MONGO_ROOT_USER}
-      # - MONGO_INITDB_ROOT_PASSWORD=${MONGO_ROOT_PASSWORD}
-      - MONGO_INITDB_DATABASE=${MONGO_DATABASE}
+      - MONGO_INITDB_DATABASE=${MONGO_DATABASE:-name}
     networks:
       - database
     ports:
@@ -66,11 +148,36 @@ services:
   redis-insight:
     image: redis/redisinsight:latest
     restart: always
-    # volumes:
-    ports:
-      - 5540:5540
     networks:
       - database
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.redis-insight.rule=Host(`traefik.redis-insight.local`)"
+      - "traefik.http.services.redis-insight.loadbalancer.server.port=5540"
+      # - "traefik.http.routers.redis-insight.tls.certresolver=kuon-certificate"
+      # - "traefik.http.routers.redis-insight.tls=true"
+  
+  ################################
+  # h5-nginx:
+  #   image: nginx:1.27.2-alpine
+  #   restart: always
+  #   # ports:
+  #   # - 80:80
+  #   volumes:
+  #     - ./app/phpmyadmin/nginx.conf:/etc/nginx/nginx.conf
+  #   networks:
+  #     - database
+  #   labels:
+  #     - "traefik.enable=true"
+  #     - "traefik.http.routers.h5.rule=Host(`max-value.media.local`)"
+  #     - "traefik.http.services.h5.loadbalancer.server.port=80"
+  #     # - "traefik.http.middlewares.service2-strip-prefix.stripPrefix.prefixes=/phpmyadmin"
+  #     # - "traefik.http.routers.service2.middlewares=service2-strip-prefix"
+  #     # - "traefik.http.routers.phpmyadmin.tls=true"
+  #     # - "traefik.http.routers.phpmyadmin.tls.certresolver=kuon-certificate"
+      
+
+  ################################
 
 networks:
   database:
